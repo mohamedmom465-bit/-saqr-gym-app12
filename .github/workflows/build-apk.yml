@@ -90,36 +90,53 @@ jobs:
 
       - name: Unify Android SDK/NDK/JVM across ALL plugin modules (root cause fix)
         run: |
-          if grep -q 'plugins.withId("com.android.library")' android/build.gradle.kts 2>/dev/null; then
-            echo "Root-level unification already applied (committed android/ folder) - skipping."
+          F=android/build.gradle.kts
+
+          # سبب الخطأ "languageVersion is final": استدعاء jvmToolchain(17) متأخر
+          # بعد ما الـ plugin يكون قفل الـ toolchain. بنشيله لو موجود (حتى في android/ متعمله commit).
+          sed -i 's|jvmToolchain(17)|// jvmToolchain removed (caused: languageVersion is final)|' "$F"
+
+          if grep -q 'SAQR-UNIFY-V2' "$F"; then
+            echo "Root-level unification V2 already applied - skipping."
             exit 0
           fi
-          # المشكلة الجذرية: كل plugin (مكتبة) بيجيله ملف build.gradle خاص بيه،
-          # وممكن يكون متظبط على رقم SDK/NDK/Java قديم أو مختلف عن باقي المشروع.
-          # ده اللي بيسبب أغلب الأخطاء المتكررة (checkReleaseAarMetadata،
-          # Inconsistent JVM target، إلخ) حتى لو إعدادات تطبيقك أنت مظبوطة.
-          #
-          # السطور دي بتوحّد الإعدادات دي على كل المكتبات مرة واحدة،
-          # باستخدام plugins.withId بدل afterEvaluate عشان تشتغل مهما كان
-          # توقيت تقييم كل مشروع فرعي (يتجنب خطأ "already evaluated").
-          cat >> android/build.gradle.kts << 'EOF'
 
+          if grep -q 'plugins.withId("com.android.library")' "$F"; then
+            echo "Older unification found - adding only the safe Kotlin JVM target part."
+            cat >> "$F" << 'EOF'
+
+          // SAQR-UNIFY-V2
+          subprojects {
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+                  compilerOptions {
+                      jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+                  }
+              }
+          }
+          EOF
+            exit 0
+          fi
+
+          cat >> "$F" << 'EOF'
+
+          // SAQR-UNIFY-V2
           subprojects {
               plugins.withId("com.android.library") {
-                  extensions.configure(com.android.build.api.dsl.LibraryExtension::class.java) {
+                  extensions.configure(com.android.build.gradle.LibraryExtension::class.java) {
                       compileSdk = 36
                       ndkVersion = "28.2.13676358"
                   }
               }
               plugins.withId("com.android.application") {
-                  extensions.configure(com.android.build.api.dsl.ApplicationExtension::class.java) {
+                  extensions.configure(com.android.build.gradle.BaseAppModuleExtension::class.java) {
                       compileSdk = 36
                       ndkVersion = "28.2.13676358"
                   }
               }
-              plugins.withId("org.jetbrains.kotlin.android") {
-                  extensions.configure(org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension::class.java) {
-                      jvmToolchain(17)
+              // بدل jvmToolchain(17): بنضبط jvmTarget على مستوى الـ task (lazy) فمفيش تعارض مع languageVersion
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+                  compilerOptions {
+                      jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
                   }
               }
               tasks.withType(JavaCompile::class.java).configureEach {
