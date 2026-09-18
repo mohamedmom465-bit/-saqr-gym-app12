@@ -96,6 +96,10 @@ jobs:
           # بعد ما الـ plugin يكون قفل الـ toolchain. بنشيله لو موجود (حتى في android/ متعمله commit).
           sed -i 's|jvmToolchain(17)|// jvmToolchain removed (caused: languageVersion is final)|' "$F"
 
+          # AGP 9 شال الكلاسات القديمة (BaseAppModuleExtension / gradle.LibraryExtension)،
+          # فبنحوّلها للـ DSL الجديد (يشمل حالة android/ المتعمله commit بنسخة قديمة)
+          sed -i 's|com.android.build.gradle.BaseAppModuleExtension|com.android.build.api.dsl.ApplicationExtension|g; s|com.android.build.gradle.LibraryExtension|com.android.build.api.dsl.LibraryExtension|g' "$F"
+
           if grep -q 'SAQR-UNIFY-V2' "$F"; then
             echo "Root-level unification V2 already applied - skipping."
             exit 0
@@ -122,13 +126,13 @@ jobs:
           // SAQR-UNIFY-V2
           subprojects {
               plugins.withId("com.android.library") {
-                  extensions.configure(com.android.build.gradle.LibraryExtension::class.java) {
+                  extensions.configure(com.android.build.api.dsl.LibraryExtension::class.java) {
                       compileSdk = 36
                       ndkVersion = "28.2.13676358"
                   }
               }
               plugins.withId("com.android.application") {
-                  extensions.configure(com.android.build.gradle.BaseAppModuleExtension::class.java) {
+                  extensions.configure(com.android.build.api.dsl.ApplicationExtension::class.java) {
                       compileSdk = 36
                       ndkVersion = "28.2.13676358"
                   }
